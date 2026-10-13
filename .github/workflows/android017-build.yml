@@ -1,0 +1,152 @@
+name: Build Internet Battery Android 0.17 LAB
+on:
+  push:
+    branches: [feature/android017-keystore-build]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    outputs:
+      sha256: ${{ steps.checksum.outputs.sha256 }}
+    steps:
+      - name: Checkout project configuration
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install JDK 17
+        uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-disabled: true
+      - name: Recover original 0.13 source (no secrets)
+        id: sources
+        env:
+          IB_SOURCE_URL: https://5tgvowvfduadsxzq.public.blob.vercel-storage.com/InternetBattery_0_13_Source_And_Verification.zip?download=1
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path, PurePosixPath
+          from urllib.request import Request,urlopen
+          from urllib.parse import urlparse
+          from io import BytesIO
+          from zipfile import ZipFile
+          import hashlib,os,re
+          url=os.environ["IB_SOURCE_URL"]
+          host=urlparse(url)
+          if host.scheme!='https' or host.hostname!='5tgvowvfduadsxzq.public.blob.vercel-storage.com':
+              raise SystemExit("wrong immutable source host")
+          with urlopen(Request(url,headers={'User-Agent':'InternetBattery-build-v0.17'}),timeout=75) as r:
+              raw=r.read(175_000_001)
+          if not raw or len(raw)>175_000_000: raise SystemExit("invalid archive size")
+          source_sha=hashlib.sha256(raw).hexdigest()
+          if source_sha!='620eae8a291caf3bc397a499c39a2c3e7d6879129ef47eb48a31adbf19f03a8c':
+              raise SystemExit('Source archive digest changed; refusing build')
+          print("Verified 0.13 source ZIP SHA256:",source_sha)
+          base=Path('android-src');base.mkdir()
+          expanded=0;files=0
+          with ZipFile(BytesIO(raw)) as z:
+              for item in z.infolist():
+                  n=PurePosixPath(item.filename)
+                  if n.is_absolute() or '..' in n.parts or len(n.parts)>18:raise SystemExit("unsafe archive member")
+                  if (item.external_attr>>16)&0o170000==0o120000:raise SystemExit("symlinks forbidden")
+                  if item.is_dir():continue
+                  expanded+=item.file_size;files+=1
+                  if expanded>1_200_000_000 or files>20000:raise SystemExit("too many extracted bytes")
+                  output=base.joinpath(*n.parts);output.parent.mkdir(parents=True,exist_ok=True)
+                  with z.open(item) as inp,open(output,'wb') as out:
+                      while True:
+                          part=inp.read(1<<20)
+                          if not part:break
+                          out.write(part)
+          roots=list(base.rglob('settings.gradle.kts'))
+          if len(roots)!=1:raise SystemExit(f"Expected one Android source root, found {len(roots)}")
+          root=roots[0].parent
+          config=root/'app/build.gradle.kts'
+          txt=config.read_text()
+          if 'applicationId = "com.internetbattery"' not in txt:raise SystemExit("Unexpected Android application id")
+          txt=txt.replace('applicationId = "com.internetbattery"','applicationId = "com.internetbattery.lab17"')
+          txt=txt.replace('versionCode = 13','versionCode = 17').replace('versionName = "0.13.0-lab"','versionName = "0.17.0-lab"')
+          config.write_text(txt)
+          ui=root/'app/src/main/java/com/internetbattery/MainActivity.kt'
+          txt=ui.read_text()
+          txt=txt.replace('mutableStateOf("") }\n    var probeResult', 'mutableStateOf("wss://internetbattery-gateway.onrender.com/tunnel") }\n    var probeResult')
+          txt=txt.replace('mutableStateOf("ib") }\n    var ib1Voucher','mutableStateOf("ib-ae01cb519016c4") }\n    var ib1Voucher')
+          txt=txt.replace('INTERNET BATTERY 0.13','INTERNET BATTERY LAB 0.17')
+          txt=txt.replace('var clientSecret by remember { mutableStateOf("") }','var clientSecret by remember { mutableStateOf(LabKeyStore.read(context)) }')
+          txt=txt.replace('onValueChange={clientSecret=it.trim()}', 'onValueChange={ clientSecret=it.trim(); if(clientSecret.isBlank()) LabKeyStore.clear(context) else LabKeyStore.save(context,clientSecret) }')
+          ui.write_text(txt)
+          overlay=Path('android/overlays/LabKeyStore.kt')
+          target=root/'app/src/main/java/com/internetbattery/LabKeyStore.kt'
+          if not overlay.is_file(): raise SystemExit('Keystore overlay missing')
+          target.write_text(overlay.read_text())
+          manifest=root/'app/src/main/AndroidManifest.xml'
+          m=manifest.read_text().replace('android:label="Internet Battery"','android:label="Internet Battery LAB 0.17"')
+          manifest.write_text(m)
+          import subprocess
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:f.write('project_dir='+str(root.resolve())+'\n')
+          print("Android project:",root)
+          print("Project members:",files)
+          PY
+      - name: Restore officially hashed native tun2socks AAR
+        working-directory: ${{ steps.sources.outputs.project_dir }}
+        run: |
+          test -f scripts/fetch_hev_aar.py
+          python3 scripts/fetch_hev_aar.py
+      - name: Build APK and 0.13 regression tests
+        working-directory: ${{ steps.sources.outputs.project_dir }}
+        run: |
+          gradle --version
+          gradle --no-daemon --stacktrace :app:assembleDebug :app:testDebugUnitTest
+      - name: Verify final debug APK and record digest
+        id: checksum
+        run: |
+          set -euo pipefail
+          find android-src -type f -name 'app-debug.apk' -print
+          APK=$(find android-src -type f -path '*/app/build/outputs/apk/debug/app-debug.apk' | head -1)
+          test -n "$APK"
+          test "$(stat -c %s "$APK")" -gt 1000000
+          cp "$APK" InternetBattery-0.17.0-lab-debug.apk
+          SHA=$(sha256sum InternetBattery-0.17.0-lab-debug.apk | cut -d' ' -f1)
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          echo "ANDROID17_APK_SHA256=$SHA"
+      - name: Publish CI artifact for review
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: InternetBattery-0.17.0-LAB-debug
+          path: InternetBattery-0.17.0-lab-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+
+  publish-prerelease:
+    needs: build
+    if: github.ref == 'refs/heads/feature/android017-keystore-build'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Fetch tested build artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: InternetBattery-0.17.0-LAB-debug
+      - name: Create explicitly unverified Android research prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          APK_SHA256: ${{ needs.build.outputs.sha256 }}
+        run: |
+          gh release create android-0.17.0-lab \
+            InternetBattery-0.17.0-lab-debug.apk \
+            --title "Internet Battery 0.17 Android LAB · device test needed" \
+            --prerelease \
+            --notes "Research test build only. APK SHA256: ${APK_SHA256}. Separate package com.internetbattery.lab; does not replace existing Android 0.13. The Render gateway must have DB credentials and per-device pairing. An active authorized physical access network is required. Phone VPN, encrypted HTTPS traffic, IB1 persistent redemption, roaming and offline-outside-home functionality are not yet physically validated. Do not use on sensitive accounts."
