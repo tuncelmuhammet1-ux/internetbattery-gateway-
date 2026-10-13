@@ -45,6 +45,15 @@ manifest.write_text(manifest.read_text().replace('android:label="Internet Batter
 test=p/'app/src/androidTest/java/com/internetbattery/RemoteWssRealNetworkTest.kt'
 test.parent.mkdir(parents=True,exist_ok=True)
 test.write_text(Path('android/verification/RemoteWssRealNetworkTest.kt').read_text())
+vpn_test=p/'app/src/androidTest/java/com/internetbattery/RemoteWssVpnEndToEndTest.kt'
+vpn_test.write_text(Path('android/verification/RemoteWssVpnEndToEndTest.kt').read_text())
+gradle2=p/'app/build.gradle.kts'
+gradle_txt=gradle2.read_text()
+anchor='    androidTestImplementation("androidx.test:core:1.6.1")'
+if anchor not in gradle_txt:raise SystemExit('Android Gradle test anchor changed')
+gradle_txt=gradle_txt.replace(anchor,anchor+'\\n    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")'.replace('\\n','\n'))
+gradle2.write_text(gradle_txt)
+print("IB17_VPN_INSTRUMENTATION_ADDED")
 print("ANDROID17_TEST_SOURCE_PREPARED")
 PY
 
