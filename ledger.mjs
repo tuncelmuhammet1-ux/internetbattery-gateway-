@@ -154,7 +154,8 @@ export class PostgresLedger {
 export async function connectPostgresLedger(url,opts={}){
   if(typeof url!=='string'||!/^postgres(ql)?:\/\//.test(url))throw Error('DATABASE_URL_not_configured');
   // Do not print URLs or credentials to logs, even on failed connections.
-  const {Pool}=await import('pg');
+  const pg=await import('pg');
+  const Pool=pg.Pool||pg.default?.Pool;
   const pool=new Pool({connectionString:url,max:5,connectionTimeoutMillis:7000,idleTimeoutMillis:20000,
     ssl:opts.ssl === true?{rejectUnauthorized:true}:undefined,application_name:'internetbattery-ledger-lab'});
   const ledger=new PostgresLedger(pool);

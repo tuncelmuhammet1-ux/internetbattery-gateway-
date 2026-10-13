@@ -8,7 +8,8 @@ const url=process.env.TEST_DATABASE_URL;
 const TEST_OPTIONS={skip:!url?'TEST_DATABASE_URL unset; PostgreSQL integration is CI-only':false};
 
 test('PostgreSQL survives new process/pool, idempotent grants and refuses double-spends',TEST_OPTIONS,async()=>{
-  const {Pool}=await import('pg');
+  const pg=await import('pg');
+  const Pool=pg.Pool||pg.default?.Pool;
   const pool=new Pool({connectionString:url,max:12,connectionTimeoutMillis:4000});
   const id='pilot_'+randomBytes(8).toString('hex'),holder='ib-'+randomBytes(6).toString('hex');
   const gb1=GB,gb5=5*GB,gb10=10*GB;
