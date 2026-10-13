@@ -9,6 +9,7 @@ import {verifierFromPem, GB} from './voucher.mjs';
 import {makeWalletApi} from './wallet-api.mjs';
 import {connectPostgresLedger} from './ledger.mjs';
 import {createPairing} from './pairing.mjs';
+import {runRemoteWssHttpsProbe} from './tools/wss-remote-probe.mjs';
 
 const VERSION='0.15.0-lab';
 const MAX_STREAMS=4;
@@ -32,6 +33,7 @@ export function makeServer(env=process.env, hooks={}) {
     gatewayId:env.IB_VOUCHER_GATEWAY_ID});
   // Database balance is research credit, not a prepaid cellular data plan.
   const pairing=createPairing(config,{enabled:env.IB_PAIRING_ENABLED==='1',code:hooks.pairingCode,emit:hooks.pairingEmit||console.log});
+  const probeStatus={state:env.IB_REMOTE_WSS_SELFTEST==='1'?'pending':'disabled'};
   const nonceCache=new Map();
   const maxAge=2*60*1000;
   let openSessions=0;
@@ -42,6 +44,7 @@ export function makeServer(env=process.env, hooks={}) {
     }
     if(req.method!=='GET')return jsonResponse(res,405,{error:'method_not_allowed'});
     if(req.url==='/healthz')return jsonResponse(res,200,{service:'internetbattery-gateway',version:VERSION,status:'alive'});
+    if(req.url==='/selftestz')return jsonResponse(res,200,{...probeStatus,physicalAndroidVerified:false,operatorGbStored:false});
     if(req.url==='/readyz')return jsonResponse(res,config?200:503,{ready:!!config,mode:'lab_ws1',android013LabCompatibility:android013Enabled,
       creditLedgerReady:creditReady,ib1VoucherSupport:creditReady,walletPortalReady:walletReady,pairingPortalConfigured:env.IB_PAIRING_ENABLED==='1',
       labSessionByteCap:config?.limit||0,requiresActiveNetwork:true});
@@ -123,6 +126,7 @@ export function makeServer(env=process.env, hooks={}) {
     ws.sendJson({t:'hello',version:VERSION,mode:'lab_ws1',quotaBytes:config.limit,ib1VoucherSupport:false});
   });
   server.on('close',()=>{nonceCache.clear();});
+  server.recordProbeResult=result=>{Object.assign(probeStatus,{state:result.ok?'success':'failure',checkedAt:new Date().toISOString(),mode:result.mode||'wss_tcp_tls_https',httpStatus:result.httpStatus||null,error:result.error||null,elapsedMs:result.durationMs||null});};
   hooks.onCreated?.(server);
   return server;
 }
@@ -143,7 +147,18 @@ if(process.argv[1] && fileURLToPath(import.meta.url)===process.argv[1]){
     }
     const port=Number(env.PORT||3000);
     const server=makeServer(env,{ledger});
-    server.listen(port,'0.0.0.0',()=>console.log(JSON.stringify({service:'internetbattery-gateway',version:VERSION,port,lab:true,creditLedgerConfigured:!!ledger})));
+    server.listen(port,'0.0.0.0',()=>{
+      console.log(JSON.stringify({service:'internetbattery-gateway',version:VERSION,port,lab:true,creditLedgerConfigured:!!ledger}));
+      if(env.IB_REMOTE_WSS_SELFTEST==='1'){
+        // Test the actual Render public TLS ingress, authenticated WSS, TCP relay,
+        // certificate-checked TLS and external HTTPS response without a physical phone.
+        setTimeout(()=>{
+          void runRemoteWssHttpsProbe({url:'wss://internetbattery-gateway.onrender.com/tunnel',config:readConfig(env)})
+            .then(value=>{server.recordProbeResult(value);console.log('IB_REMOTE_LIVE_PROBE_OK '+JSON.stringify(value));})
+            .catch(err=>{const reason=String(err?.message||'unknown').slice(0,100);server.recordProbeResult({ok:false,error:reason});console.warn('IB_REMOTE_LIVE_PROBE_FAILED '+reason);});
+        },3500).unref?.();
+      }
+    });
     process.on('SIGTERM',()=>server.close());
   }
   boot().catch(e=>{console.error('IB_GATEWAY_STARTUP_FAILED',e.code||e.message?.split(':')[0]||'configuration_failure');process.exitCode=1;});

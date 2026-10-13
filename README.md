@@ -62,3 +62,8 @@ Research code, not audited. PBKDF master key unrelated to operator billing; sess
 The existing Android 0.13 wire client and the separately installable 0.16 Lab app need the per-device HMAC key, **not** IB_MASTER_KEY. After the web service is deployed and its `IB_PAIRING_ENABLED=1` flag is set, the service generates a cryptographically random 128-bit one-time pairing code and logs it *only* to the protected Render Logs. The operator enters that code at the HTTPS `/pair` page. A successful redemption returns the device ID, derived device key and WSS URL. It is valid once, for up to 30 minutes, and isn't shared in GitHub, logs after redemption or the APK.
 
 The operator must save the device key privately for subsequent app restarts; the original Android 0.13 UI does not persist the secret in encrypted storage yet. Never share the master key, the code or the derived key in public. If the code expires without being redeemed, a new process restart generates another code. The `/pair` page does not grant any research data credit and has no bypass for a disabled database.
+
+
+## Public WSS -> TCP -> TLS/HTTPS smoke proof
+
+The gateway exposes `/selftestz` with one of `disabled`, `pending`, `success`, `failure`. Set `IB_REMOTE_WSS_SELFTEST=1` only on the lab instance. During boot, it performs one **internal client** handshake out to the public Render WSS ingress, resolves `example.com`, opens port 443 and runs native certificate-validated HTTPS over the tunnel. This checks actual WSS/TCP/TLS/HTTPS server behavior but is **not a physical Android VPN, QUIC or offline roaming success**. If the test fails the service remains running; check `/selftestz` and Render logs. No master key or device key is logged.
