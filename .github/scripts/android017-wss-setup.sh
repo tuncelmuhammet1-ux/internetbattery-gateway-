@@ -60,6 +60,22 @@ if vpn_text.count(legacy_loopback)!=1:raise SystemExit('Expected exactly one inv
 # Local SOCKS5 sockets are already local; outbound WSS uses protected underlay.
 vpn_text=vpn_text.replace(legacy_loopback,'// Loopback SOCKS5 stays local; VpnService rejects excluding loopback routes.')
 vpn_source.write_text(vpn_text)
+# Native tun2socks diagnostic overlay only: no private values printed.
+hev_source=p/'app/src/main/java/com/internetbattery/HevEngine.kt'
+hev=hev_source.read_text()
+old='if (!started) onStatus("Native tun2socks başlatma başarısız")'
+new='if (!started) { Log.e("IB17_HEV_DIAG", "TProxyStartService returned false"); onStatus("Native tun2socks başlatma başarısız") }'
+if hev.count(old)!=1:raise SystemExit('Unexpected HevEngine start source')
+hev=hev.replace(old,new)
+old='Log.e("InternetBattery", "Native tunnel failure", e)'
+new='Log.e("IB17_HEV_DIAG", "Native tunnel exception", e)'
+if hev.count(old)!=1:raise SystemExit('Unexpected HevEngine exception source')
+hev=hev.replace(old,new)
+old='catch (_: Throwable) { false }'
+new='catch (e: Throwable) { Log.e("IB17_HEV_DIAG", "TProxyIsRunning JNI exception", e); false }'
+if hev.count(old)!=1:raise SystemExit('Unexpected JNI state source')
+hev=hev.replace(old,new)
+hev_source.write_text(hev)
 print("ANDROID17_TEST_SOURCE_PREPARED")
 PY
 
