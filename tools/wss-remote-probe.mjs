@@ -133,3 +133,24 @@ export async function runRemoteWssHttpsProbe({url,config,remoteHost='example.com
    return {ok:true,mode:'wss_tcp_tls_https',httpStatus:result.httpStatus,tlsAuthorized:result.tlsAuthorized,bytesReceived:result.bytes,durationMs:Date.now()-begin};
  }finally{ws.close();}
 }
+
+/** Direct certificate-checked HTTPS comparison, used only to distinguish Render egress failures from WSS relay failures. */
+export async function runDirectHttpsProbe(remoteHost='example.com',timeout=11000){
+  if(!['example.com','www.cloudflare.com','www.wikipedia.org'].includes(remoteHost))throw Error('unapproved_test_host');
+  return await new Promise((resolve,reject)=>{
+    const started=Date.now();let done=false;let raw=Buffer.alloc(0);
+    const s=tls.connect({host:remoteHost,port:443,servername:remoteHost,rejectUnauthorized:true,ALPNProtocols:['http/1.1']});
+    const timer=setTimeout(()=>finish(Error('direct_https_timeout')),timeout);
+    function finish(err,result){if(done)return;done=true;clearTimeout(timer);s.destroy();if(err)reject(err);else resolve(result);}
+    s.once('secureConnect',()=>{if(!s.authorized){finish(Error('direct_tls_unauthorized'));return;}
+      s.write(`GET / HTTP/1.1\r\nHost: ${remoteHost}\r\nConnection: close\r\nUser-Agent: InternetBattery-Direct-Test\r\n\r\n`);
+    });
+    s.on('data',part=>{
+      raw=Buffer.concat([raw,part]);if(raw.length>100_000){finish(Error('direct_response_too_large'));return;}
+      const line=raw.toString('ascii',0,Math.min(raw.length,100));const m=line.match(/^HTTP\/1\.[01] (\d{3})/);
+      if(m&&raw.includes(Buffer.from('\r\n\r\n')))finish(null,{ok:true,mode:'direct_tls_https',httpStatus:Number(m[1]),tlsAuthorized:s.authorized,bytesReceived:raw.length,durationMs:Date.now()-started});
+    });
+    s.on('error',e=>finish(Error('direct_tls_error_'+(e.code||'other'))));
+    s.on('end',()=>{if(!done)finish(Error('direct_tls_closed_early'));});
+  });
+}
