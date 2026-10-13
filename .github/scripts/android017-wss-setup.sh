@@ -86,6 +86,21 @@ call_before='val started = TProxyService.TProxyStartService(conf.absolutePath, f
 call_after='Log.i("IB17_HEV_DIAG", "Invoking native TUN service, fd="+fd+", configFound="+conf.exists())'+chr(10)+'                    '+call_before
 if hev.count(call_before)!=1:raise SystemExit('Unexpected TProxy invocation')
 hev=hev.replace(call_before,call_after)
+
+# IMPORTANT: upstream hev JNI starts a native pthread and returns immediately.
+# The original Kotlin finally block deletes the YAML before the pthread
+# executes hev_config_init_from_file(), causing sporadic startup failure.
+racy='''                } finally {
+                    synchronized(guard) {
+                        if (configFile == conf) { conf.delete(); configFile = null }
+                    }
+                }'''
+fixed='''                } finally {
+                    // JNI worker is asynchronous; keep the YAML until stop().
+                }'''
+if hev.count(racy)!=1:raise SystemExit('Original premature-delete block not found exactly once')
+hev=hev.replace(racy,fixed)
+print('IB17_HEV_CONFIG_RACE_FIXED')
 hev_source.write_text(hev)
 print("ANDROID17_TEST_SOURCE_PREPARED")
 PY
