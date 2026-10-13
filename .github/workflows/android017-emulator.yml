@@ -39,23 +39,7 @@ jobs:
           emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           emulator-boot-timeout: 900
           disable-animations: true
-          script: |
-            set -eu
-            adb wait-for-device
-            test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = '1'
-            adb shell input keyevent 82
-            adb install -r internetbattery-0.17-lab.apk
-            adb shell pm path com.internetbattery.lab17 | tee /tmp/ib_android_pkg.txt
-            adb shell am start -W -n com.internetbattery.lab17/com.internetbattery.MainActivity | tee /tmp/ib_android_launch.txt
-            sleep 12
-            adb logcat -d -v time -t 10000 > /tmp/ib_android_logcat.txt
-            PID="$(adb shell pidof com.internetbattery.lab17 | tr -d '\r')"
-            test -n "$PID" || { echo 'ANDROID17_LAUNCH_FAILED_APP_NOT_RUNNING'; exit 1; }
-            if grep -A 8 'FATAL EXCEPTION' /tmp/ib_android_logcat.txt | grep -q 'com.internetbattery.lab17'; then
-              echo 'ANDROID17_LAUNCH_FAILED_CRASH'; exit 1
-            fi
-            adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity|ResumedActivity' | tail -4 || true
-            echo "IB_ANDROID17_EMULATOR_BOOT_INSTALL_LAUNCH_SUCCESS pid=$PID"
+          script: bash .github/scripts/android017-emulator-smoke.sh
       - name: Upload non-secret launch logs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
