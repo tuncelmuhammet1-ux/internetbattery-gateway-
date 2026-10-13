@@ -1,6 +1,6 @@
 {
   "name": "internetbattery-gateway",
-  "version": "0.14.0-lab",
+  "version": "0.14.1-lab",
   "private": true,
   "type": "module",
   "engines": { "node": ">=22" },
