@@ -32,6 +32,21 @@ class RemoteVpnRealNetworkTest {
         require(wss.startsWith("wss://") && wss.endsWith("/tunnel"))
         require(key.matches(Regex("[a-f0-9]{64}")))
         val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val cm = app.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        val underlayReady = runBlocking {
+            var connected = false
+            for (i in 0 until 100) {
+                val network = cm.activeNetwork
+                if (network != null &&
+                    cm.getNetworkCapabilities(network)?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true) {
+                    connected = true
+                    break
+                }
+                delay(500)
+            }
+            connected
+        }
+        assertTrue("Android emulator network not ready after 50s", underlayReady)
         val consent = VpnService.prepare(app)
         if (consent != null) {
             consent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
