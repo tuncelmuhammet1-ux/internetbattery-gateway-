@@ -67,7 +67,7 @@ The hosted server can now also accept the **original Android 0.13 transport wire
 
 `wss://internetbattery-gateway.onrender.com/tunnel`
 
-This `/tunnel` endpoint accepts the Android client's `X-IB-ID`, `X-IB-TS`, `X-IB-Nonce`, and `X-IB-MAC` handshake as defined by `WssCredentials.kt`; responds to `{ "op": "dns", "host": "example.com" }` with the Android-expected `op/dns/host/address/ipFamily` response; and supports `{ "op": "connect", "host": "...", "port": 443 }`, masked binary WebSocket frames, and restricted UDP/53. The original new `/ws` WS1 endpoint remains available for its separate lab tests.
+Set `IB_ANDROID013_COMPAT=1` in the Render environment to activate `/tunnel` after the adapter has passed tests; without this flag the endpoint returns HTTP 404. This `/tunnel` endpoint accepts the Android client's `X-IB-ID`, `X-IB-TS`, `X-IB-Nonce`, and `X-IB-MAC` handshake as defined by `WssCredentials.kt`; responds to `{ "op": "dns", "host": "example.com" }` with the Android-expected `op/dns/host/address/ipFamily` response; and supports `{ "op": "connect", "host": "...", "port": 443 }`, masked binary WebSocket frames, and restricted UDP/53. The original new `/ws` WS1 endpoint remains available for its separate lab tests.
 
 For the legacy Android device key, derive **only the device key**, not the master secret, using:
 

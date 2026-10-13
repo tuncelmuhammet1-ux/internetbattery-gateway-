@@ -7,7 +7,7 @@ import {makeServer} from '../server.mjs';
 import {readConfig} from '../auth.mjs';
 import {android013Signature,verifyAndroid013Headers} from '../android013.mjs';
 
-const env={IB_MASTER_KEY:'a'.repeat(64),IB_DEVICE_ID:'ib-device-13',IB_SESSION_BYTE_CAP:'30720'};
+const env={IB_MASTER_KEY:'a'.repeat(64),IB_DEVICE_ID:'ib-device-13',IB_SESSION_BYTE_CAP:'30720',IB_ANDROID013_COMPAT:'1'};
 const cfg=readConfig(env);
 const fakeLookup=async(host)=>host==='example.com'?[{address:'93.184.216.34',family:4}]:[{address:'127.0.0.1',family:4}];
 const echoConnect=()=>{
@@ -19,7 +19,7 @@ function headers(time=String(Date.now()),nonce=randomBytes(16).toString('hex')){
   return {'X-IB-ID':cfg.device,'X-IB-TS':time,'X-IB-Nonce':nonce,'X-IB-MAC':android013Signature(cfg,cfg.device,time,nonce)};
 }
 async function withServer(body,opts={}) {
-  const svr=makeServer(opts.noConfig?{}:env,{android013Lookup:fakeLookup,android013Connect:echoConnect});
+  const svr=makeServer(opts.noConfig?{IB_ANDROID013_COMPAT:'1'}:env,{android013Lookup:fakeLookup,android013Connect:echoConnect});
   const sockets=new Set();svr.on('connection',s=>{sockets.add(s);s.on('close',()=>sockets.delete(s));});
   await new Promise(ok=>svr.listen(0,'127.0.0.1',ok));
   try{return await body(svr.address().port);}finally{

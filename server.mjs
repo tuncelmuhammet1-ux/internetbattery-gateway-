@@ -18,6 +18,7 @@ function validateBase64(b64) {return typeof b64==='string' && b64.length>0 && b6
 export function makeServer(env=process.env, hooks={}) {
   const config=readConfig(env);
   const android013=makeAndroid013Gateway(config,{lookup:hooks.android013Lookup,connect:hooks.android013Connect});
+  const android013Enabled=env.IB_ANDROID013_COMPAT==='1';
   // This implementation is a transport test, not the 0.13 IB1 voucher redemption service.
   const nonceCache=new Map();
   const maxAge=2*60*1000;
@@ -25,11 +26,11 @@ export function makeServer(env=process.env, hooks={}) {
   const server=http.createServer((req,res)=>{
     if(req.method!=='GET')return jsonResponse(res,405,{error:'method_not_allowed'});
     if(req.url==='/healthz')return jsonResponse(res,200,{service:'internetbattery-gateway',version:VERSION,status:'alive'});
-    if(req.url==='/readyz')return jsonResponse(res,config?200:503,{ready:!!config,mode:'lab_ws1',android013LabCompatibility:true,ib1VoucherSupport:false});
+    if(req.url==='/readyz')return jsonResponse(res,config?200:503,{ready:!!config,mode:'lab_ws1',android013LabCompatibility:android013Enabled,ib1VoucherSupport:false});
     return jsonResponse(res,404,{error:'not_found'});
   });
   server.on('upgrade',(req,socket,head)=>{
-    if(req.url==='/tunnel'){android013.upgrade(req,socket,head);return;}
+    if(req.url==='/tunnel'){if(!android013Enabled){closedUpgrade(socket,'404 Not Found');return;}android013.upgrade(req,socket,head);return;}
     if(req.url!=='/ws'){closedUpgrade(socket,'404 Not Found');return;}
     if(!config){closedUpgrade(socket,'503 Service Unavailable');return;}
     if(openSessions>=50){closedUpgrade(socket,'503 Service Unavailable');return;}
