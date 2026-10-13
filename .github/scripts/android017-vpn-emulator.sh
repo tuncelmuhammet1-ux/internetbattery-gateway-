@@ -57,8 +57,10 @@ PY
   fi
   sleep 1
 done
+set +e
 wait "$instrument_pid"
 rc=$?
+set -e
 # Present a credential-free test summary.
 sed -E 's/[a-f0-9]{64}/[REDACTED_64HEX]/g' .private/ci-vpn-instrumentation-result.txt | tail -70
 if [[ "$rc" -ne 0 ]] || ! grep -q 'OK (1 test)' .private/ci-vpn-instrumentation-result.txt; then
