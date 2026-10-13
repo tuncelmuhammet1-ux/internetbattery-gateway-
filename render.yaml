@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: internetbattery-gateway
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: IB_MASTER_KEY
+        sync: false
+      - key: IB_DEVICE_ID
+        sync: false
+      - key: IB_SESSION_BYTE_CAP
+        value: "5242880"
