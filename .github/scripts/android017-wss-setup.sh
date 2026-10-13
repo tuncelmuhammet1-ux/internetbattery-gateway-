@@ -50,8 +50,8 @@ vpn_test.write_text(Path('android/verification/RemoteVpnRealNetworkTest.kt').rea
 # Ephemeral diagnostic only; no changes to shipped 0.17 source/APK.
 vpn_source=p/'app/src/main/java/com/internetbattery/TunnelVpnService.kt'
 vpn_text=vpn_source.read_text()
-old_catch='}catch(e:Exception){\\n                RuntimeStatus.update { it.copy(vpnMessage="Uzak WSS VPN hatası: "+e.message,'
-new_catch='}catch(e:Exception){\\n                android.util.Log.e("IB17_VPN_DIAG", "Remote VPN stack trace", e)\\n                RuntimeStatus.update { it.copy(vpnMessage="Uzak WSS VPN hatası: "+e.message,'
+old_catch='}catch(e:Exception){'+chr(10)+'                RuntimeStatus.update { it.copy(vpnMessage="Uzak WSS VPN hatası: "+e.message,'
+new_catch='}catch(e:Exception){'+chr(10)+'                android.util.Log.e("IB17_VPN_DIAG", "Remote VPN stack trace", e)'+chr(10)+'                RuntimeStatus.update { it.copy(vpnMessage="Uzak WSS VPN hatası: "+e.message,'
 if vpn_text.count(old_catch)!=1:raise SystemExit('VPN catch diagnostic anchor invalid')
 vpn_source.write_text(vpn_text.replace(old_catch,new_catch))
 print("ANDROID17_TEST_SOURCE_PREPARED")
