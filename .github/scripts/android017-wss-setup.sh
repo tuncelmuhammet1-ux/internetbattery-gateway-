@@ -45,6 +45,8 @@ manifest.write_text(manifest.read_text().replace('android:label="Internet Batter
 test=p/'app/src/androidTest/java/com/internetbattery/RemoteWssRealNetworkTest.kt'
 test.parent.mkdir(parents=True,exist_ok=True)
 test.write_text(Path('android/verification/RemoteWssRealNetworkTest.kt').read_text())
+vpn_test=p/'app/src/androidTest/java/com/internetbattery/RemoteVpnRealNetworkTest.kt'
+vpn_test.write_text(Path('android/verification/RemoteVpnRealNetworkTest.kt').read_text())
 print("ANDROID17_TEST_SOURCE_PREPARED")
 PY
 
