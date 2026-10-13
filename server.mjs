@@ -9,7 +9,7 @@ import {verifierFromPem, GB} from './voucher.mjs';
 import {makeWalletApi} from './wallet-api.mjs';
 import {connectPostgresLedger} from './ledger.mjs';
 import {createPairing} from './pairing.mjs';
-import {runRemoteWssHttpsProbe} from './tools/wss-remote-probe.mjs';
+import {runRemoteWssHttpsProbe,runDirectHttpsProbe} from './tools/wss-remote-probe.mjs';
 
 const VERSION='0.15.0-lab';
 const MAX_STREAMS=4;
@@ -153,9 +153,28 @@ if(process.argv[1] && fileURLToPath(import.meta.url)===process.argv[1]){
         // Test the actual Render public TLS ingress, authenticated WSS, TCP relay,
         // certificate-checked TLS and external HTTPS response without a physical phone.
         setTimeout(()=>{
-          void runRemoteWssHttpsProbe({url:'wss://internetbattery-gateway.onrender.com/tunnel',config:readConfig(env)})
-            .then(value=>{server.recordProbeResult(value);console.log('IB_REMOTE_LIVE_PROBE_OK '+JSON.stringify(value));})
-            .catch(err=>{const reason=String(err?.message||'unknown').slice(0,100);server.recordProbeResult({ok:false,error:reason});console.warn('IB_REMOTE_LIVE_PROBE_FAILED '+reason);});
+          void (async()=>{
+            const issues=[];
+            for(const host of ['example.com','www.cloudflare.com']){
+              try{
+                const direct=await runDirectHttpsProbe(host);
+                console.log('IB_DIRECT_HTTPS_PROBE_OK '+JSON.stringify({host,...direct}));
+              }catch(err){
+                const reason=String(err?.message||'error').slice(0,100);
+                issues.push(host+':direct:'+reason);console.warn('IB_DIRECT_HTTPS_PROBE_FAILED '+host+':'+reason);
+              }
+              try{
+                const value=await runRemoteWssHttpsProbe({url:'wss://internetbattery-gateway.onrender.com/tunnel',config:readConfig(env),remoteHost:host});
+                server.recordProbeResult(value);
+                console.log('IB_REMOTE_LIVE_PROBE_OK '+JSON.stringify({host,...value}));return;
+              }catch(err){
+                const reason=String(err?.message||'error').slice(0,100);
+                issues.push(host+':wss:'+reason);console.warn('IB_REMOTE_LIVE_PROBE_TRY_FAILED '+host+':'+reason);
+              }
+            }
+            server.recordProbeResult({ok:false,error:issues.join('|').slice(0,180)});
+            console.warn('IB_REMOTE_LIVE_PROBE_FAILED '+issues.join('|').slice(0,180));
+          })();
         },3500).unref?.();
       }
     });
