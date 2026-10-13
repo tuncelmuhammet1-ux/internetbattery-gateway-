@@ -53,7 +53,13 @@ vpn_text=vpn_source.read_text()
 old_catch='}catch(e:Exception){'+chr(10)+'                RuntimeStatus.update { it.copy(vpnMessage="Uzak WSS VPN hatası: "+e.message,'
 new_catch='}catch(e:Exception){'+chr(10)+'                android.util.Log.e("IB17_VPN_DIAG", "Remote VPN stack trace", e)'+chr(10)+'                RuntimeStatus.update { it.copy(vpnMessage="Uzak WSS VPN hatası: "+e.message,'
 if vpn_text.count(old_catch)!=1:raise SystemExit('VPN catch diagnostic anchor invalid')
-vpn_source.write_text(vpn_text.replace(old_catch,new_catch))
+vpn_text=vpn_text.replace(old_catch,new_catch)
+legacy_loopback='builder.excludeRoute(IpPrefix(InetAddress.getByName("127.0.0.1"),32))'
+if vpn_text.count(legacy_loopback)!=1:raise SystemExit('Expected exactly one invalid loopback VPN route')
+# Android VpnService.Builder rejects loopback prefixes with Bad address.
+# Local SOCKS5 sockets are already local; outbound WSS uses protected underlay.
+vpn_text=vpn_text.replace(legacy_loopback,'// Loopback SOCKS5 stays local; VpnService rejects excluding loopback routes.')
+vpn_source.write_text(vpn_text)
 print("ANDROID17_TEST_SOURCE_PREPARED")
 PY
 
