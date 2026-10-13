@@ -65,7 +65,7 @@ set -e
 sed -E 's/[a-f0-9]{64}/[REDACTED_64HEX]/g' .private/ci-vpn-instrumentation-result.txt | tail -70
 if [[ "$rc" -ne 0 ]] || ! grep -q 'OK (1 test)' .private/ci-vpn-instrumentation-result.txt; then
    echo 'IB17_ANDROID_VPN_WSS_HTTPS_NOT_VERIFIED'
-   adb logcat -d -v time -s IB17_VPN_DIAG:E IB17_HEV_DIAG:E InternetBattery:E | tail -130 || true
+   adb logcat -d -v time -s IB17_VPN_DIAG:E IB17_HEV_DIAG:E IB17_NATIVE_LOG:E InternetBattery:E | tail -130 || true
    adb logcat -d -v time -t 9000 | grep -Ei '(socks5|tun2socks|tproxy|htproxy|ib17_hev|invalid.*config|yaml)' | tail -50 || true
    exit 1
 fi
