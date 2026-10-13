@@ -1,0 +1,77 @@
+name: Recover published IB 0.13 sources
+on:
+  push:
+    branches:
+      - compat/ib013-source-recovery
+
+permissions:
+  contents: write
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout isolated recovery branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: true
+      - name: Read public 0.13 source ZIP as inert text files
+        env:
+          IB_SOURCE_URL: https://5tgvowvfduadsxzq.public.blob.vercel-storage.com/InternetBattery_0_13_Source_And_Verification.zip?download=1
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path, PurePosixPath
+          from urllib.request import Request, urlopen
+          from urllib.parse import urlparse
+          from zipfile import ZipFile, BadZipFile
+          from io import BytesIO
+          import os, re, hashlib, sys
+
+          url=os.environ['IB_SOURCE_URL']
+          u=urlparse(url)
+          if u.scheme!='https' or u.hostname!='5tgvowvfduadsxzq.public.blob.vercel-storage.com' or not u.path.endswith('InternetBattery_0_13_Source_And_Verification.zip'):
+              raise SystemExit('Unapproved input source URL')
+          request=Request(url,headers={'User-Agent':'InternetBattery-source-verification/0.13'})
+          cap=120 * 1024 * 1024
+          with urlopen(request,timeout=40) as response:
+              body=response.read(cap+1)
+          if not body or len(body)>cap:
+              raise SystemExit('Empty or oversized source ZIP')
+          print('Downloaded bytes:',len(body),'SHA256:',hashlib.sha256(body).hexdigest())
+          dest=Path('compatibility/reference-0.13')
+          dest.mkdir(parents=True, exist_ok=True)
+          allowed={'.kt','.java','.js','.mjs','.cjs','.json','.xml','.md','.yaml','.yml','.properties','.gradle','.kts','.txt','.sh','.html'}
+          selected=0; total=0
+          with ZipFile(BytesIO(body)) as archive:
+              for item in archive.infolist():
+                  original=PurePosixPath(item.filename)
+                  if item.is_dir() or original.is_absolute() or '..' in original.parts or len(original.parts)>16: continue
+                  if any(segment in {'.git','.gradle','node_modules','.github','build','.idea','.venv','__pycache__'} for segment in original.parts): continue
+                  if original.suffix.lower() not in allowed: continue
+                  if any(word in original.name.lower() for word in ('keystore','secrets','private_key','local.properties','.env')): continue
+                  if item.file_size > 256*1024 or selected>=400 or total+item.file_size>12*1024*1024: continue
+                  # Preserve the original tree under a separate non-deploying branch.
+                  try:
+                      data=archive.read(item)
+                      data.decode('utf-8')
+                  except (UnicodeDecodeError, BadZipFile): continue
+                  output=dest.joinpath(*original.parts)
+                  output.parent.mkdir(parents=True,exist_ok=True)
+                  output.write_bytes(data)
+                  selected+=1;total+=len(data)
+                  print('RECOVERED',str(original),item.file_size)
+          print('RECOVERY_SUMMARY', selected, total)
+          if selected<8: raise SystemExit('Source archive did not yield enough text source files')
+          PY
+      - name: Commit recovered source to isolated reference branch
+        run: |
+          git config user.name "internetbattery-recovery"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- compatibility/reference-0.13
+          if git diff --cached --quiet; then
+            echo "No source changes"
+          else
+            git commit -m "Recover public 0.13 source text for compatibility review"
+            git push origin HEAD:refs/heads/compat/ib013-source-recovery
+          fi
