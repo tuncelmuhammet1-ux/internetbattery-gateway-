@@ -52,7 +52,7 @@ export function publicV4(ip) {
   if (x === 100 && y >= 64 && y <= 127) return false;
   if (x === 169 && y === 254) return false;
   if (x === 172 && y >= 16 && y <= 31) return false;
-  if (x === 192 && (y === 168 || (y === 0 && z === 0) || (y === 0 && z === 2) || (y === 88 && z === 99))) return false;
+  if (x === 192 && (y === 168 || (y === 0) || (y === 88 && z === 99))) return false;
   if (x === 198 && (y === 18 || y === 19 || (y === 51 && z === 100))) return false;
   if (x === 203 && y === 0 && z === 113) return false;
   if (x === 255) return false;

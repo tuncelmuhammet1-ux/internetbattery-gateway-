@@ -4,8 +4,9 @@ import net from 'node:net';
 import {fileURLToPath} from 'node:url';
 import {readConfig, verifyHeaders, publicV4} from './auth.mjs';
 import {upgradeWebSocket} from './ws.mjs';
+import {makeAndroid013Gateway} from './android013.mjs';
 
-const VERSION='0.14.0-lab';
+const VERSION='0.14.1-lab';
 const MAX_STREAMS=4;
 const MAX_DATA=96*1024;
 function publicHost(host) {return typeof host==='string' && host.length<=253 && host.includes('.') && host.split('.').every(label => /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/.test(label));}
@@ -16,6 +17,7 @@ function validateBase64(b64) {return typeof b64==='string' && b64.length>0 && b6
 
 export function makeServer(env=process.env, hooks={}) {
   const config=readConfig(env);
+  const android013=makeAndroid013Gateway(config,{lookup:hooks.android013Lookup,connect:hooks.android013Connect});
   // This implementation is a transport test, not the 0.13 IB1 voucher redemption service.
   const nonceCache=new Map();
   const maxAge=2*60*1000;
@@ -23,10 +25,11 @@ export function makeServer(env=process.env, hooks={}) {
   const server=http.createServer((req,res)=>{
     if(req.method!=='GET')return jsonResponse(res,405,{error:'method_not_allowed'});
     if(req.url==='/healthz')return jsonResponse(res,200,{service:'internetbattery-gateway',version:VERSION,status:'alive'});
-    if(req.url==='/readyz')return jsonResponse(res,config?200:503,{ready:!!config,mode:'lab_ws1',ib1VoucherSupport:false});
+    if(req.url==='/readyz')return jsonResponse(res,config?200:503,{ready:!!config,mode:'lab_ws1',android013LabCompatibility:true,ib1VoucherSupport:false});
     return jsonResponse(res,404,{error:'not_found'});
   });
   server.on('upgrade',(req,socket,head)=>{
+    if(req.url==='/tunnel'){android013.upgrade(req,socket,head);return;}
     if(req.url!=='/ws'){closedUpgrade(socket,'404 Not Found');return;}
     if(!config){closedUpgrade(socket,'503 Service Unavailable');return;}
     if(openSessions>=50){closedUpgrade(socket,'503 Service Unavailable');return;}

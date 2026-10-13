@@ -1,8 +1,8 @@
 # INTERNET BATTERY — Remote Gateway (research/lab)
 
-**Türkçe durum:** Android 0.13 laboratuvarındaki gerçek trafik/kota deneyi korunmuştur. Bu depo, kalıcı Render sunucusuna geçiş için hazırlanmış **yeni 0.14 laboratuvar WSS aktarım denemesidir**. Mevcut Android 0.13 + IB1 protokolüyle henüz uyumlu değildir ve interneti bağlantı olmadan sakladığını iddia etmez. Anahtarların yalnızca Render ortam değişkenlerinde tutulması gerekir.
+**Türkçe durum:** Render üzerindeki 0.14.1 laboratuvar ağ geçidi, Android 0.13 uygulamasının eski WSS `/tunnel` bağlantı protokolünü artık destekler. Bu destek yalnızca kimlik doğrulama, DNS ve kotalı veri aktarımı içindir; **IB1 imzalı kredi harcaması henüz etkin değildir**. İnterneti fiziksel bağlantı olmadan depoladığımız iddia edilmez. Sunucu anahtarı yalnızca Render gizli ortam değişkenlerinde saklanmalıdır.
 
-This repository is an independent, non-production Render gateway experiment for the Internet Battery project. **0.14.0-lab is a new, explicitly versioned WSS laboratory wire protocol and is NOT compatible with the previous Android 0.13 IB1 voucher client without an adapter.** Do not enter financial credentials through this service.
+This is a non-production Internet Battery research gateway. **0.14.1-lab supports Android 0.13's transport handshake and binary relay, but explicitly rejects IB1 vouchers until a durable spent-credit ledger is available.** Do not enter financial credentials through this service.
 
 ## What it does
 
@@ -60,3 +60,27 @@ curl http://127.0.0.1:3000/readyz
 ```
 
 This is a research service, not a production VPN. Quotas are per socket and reset on reconnection; no durable voucher accounting or billing support is claimed. Render free services can sleep and use ephemeral storage.
+
+## Android 0.13 compatibility — 0.14.1 lab update
+
+The hosted server can now also accept the **original Android 0.13 transport wire format** at:
+
+`wss://internetbattery-gateway.onrender.com/tunnel`
+
+This `/tunnel` endpoint accepts the Android client's `X-IB-ID`, `X-IB-TS`, `X-IB-Nonce`, and `X-IB-MAC` handshake as defined by `WssCredentials.kt`; responds to `{ "op": "dns", "host": "example.com" }` with the Android-expected `op/dns/host/address/ipFamily` response; and supports `{ "op": "connect", "host": "...", "port": 443 }`, masked binary WebSocket frames, and restricted UDP/53. The original new `/ws` WS1 endpoint remains available for its separate lab tests.
+
+For the legacy Android device key, derive **only the device key**, not the master secret, using:
+
+`deviceKey = HMAC_SHA256(IB_MASTER_KEY_BYTES, UTF8("IB09-device:" + IB_DEVICE_ID))`
+
+Only the 64-hex derived key should be entered into the Android app along with the exact device ID. The server master key must remain private in Render. To generate the device key in a trusted terminal where the Render master key is already configured as a protected environment variable, run `node tools/derive-android013-key.mjs`. Do not paste secrets into issues or logs.
+
+**Deliberate safety restrictions:** The adapter is experimental and **does not accept** the `X-IB-Voucher` header. It rejects these requests with HTTP 403 rather than granting false credit. This means the signed IB1 credits of Android 0.13 cannot be spent on this Render free service; a durable, tamper-resistant spent-amount ledger and issuer key provisioning are still prerequisites. The non-voucher lab transport uses a **5 MiB process-lifetime cap** by default; it is not commercial metering and resets on server restart. Each session is capped at 10 minutes, 4 concurrent Android sockets are allowed, and UDP support is DNS/53 only. HTTPS certificate validation occurs on the Android client, not at the relay.
+
+In a lab phone test, first use Android 0.13 with an **empty voucher field**, WSS `/tunnel`, the provisioned device ID and derived device key. Run the preflight before enabling VPN. Wi-Fi must still be online; when mobile data is disabled outside the home, a participating physical network remains essential. Do not use this research relay for banking or sensitive accounts.
+
+### Verification
+
+- `npm test` includes legacy WS1 regressions, Android 0.13 HMAC header parity, replay protection, explicit voucher denial, DNS response structure, SSRF protections, and byte-perfect raw WebSocket binary forwarding against a local synthetic TCP upstream.
+- A deterministic 0.13 HMAC test vector has been cross-checked against a separate Kotlin JVM implementation (`IB09-device:` derivation + signed header fields).
+- A successful localhost fake upstream or CI test is not evidence of live phone TUN function, IPv6, QUIC, physical network coverage, or signed-credit redemption.
