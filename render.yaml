@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     region: frankfurt
-    buildCommand: npm ci --omit=dev
+    buildCommand: npm ci --omit=dev && npm test
     startCommand: npm start
     healthCheckPath: /healthz
     envVars:
@@ -15,4 +15,18 @@ services:
       - key: IB_DEVICE_ID
         sync: false
       - key: IB_SESSION_BYTE_CAP
-        value: "5242880"
+        value: '5242880'
+      - key: IB_ANDROID013_COMPAT
+        value: '1'
+      - key: IB_CREDIT_DB_ENABLED
+        value: '0'
+      - key: IB_WALLET_HTTP_ENABLED
+        value: '0'
+      - key: IB_VOUCHER_GATEWAY_ID
+        value: ib-gw1
+      - key: DATABASE_URL
+        sync: false
+      - key: IB_ISSUER_PUBLIC_KEY_PEM
+        sync: false
+      - key: IB_ISSUER_PRIVATE_KEY_PEM
+        sync: false

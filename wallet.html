@@ -1,0 +1,25 @@
+<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="no-referrer"><title>Internet Battery · Deneysel Hak Cüzdanı</title><style>
+*{box-sizing:border-box}body{background:#0b1c2b;color:#eaf9fb;font:16px/1.6 system-ui,sans-serif;margin:0}main{max-width:760px;margin:0 auto;padding:24px 18px 80px}h1{font-size:clamp(28px,6vw,46px)}.card{border:1px solid #3a6572;border-radius:14px;padding:20px;background:#142e42;margin:16px 0}label{display:block;margin-top:12px;font-size:14px;color:#b0d4d6}input,select,button{padding:13px;width:100%;border-radius:9px;font:inherit}input,select{background:#092238;color:#f1ffff;border:1px solid #5d8091}button{background:#76ead1;border:0;color:#103128;margin-top:14px;font-weight:750;cursor:pointer}button:disabled{opacity:.5}.secondary{background:#23485b;color:white;border:1px solid #668b97}.small{font-size:13px;color:#b1cbd3}.warn{color:#ffcf92}.value{font-size:24px;font-weight:800}textarea{width:100%;height:92px;background:#081b2d;color:#cefae8;border:1px solid #58889b;border-radius:8px;word-break:break-all;padding:12px}#result{white-space:pre-wrap;word-break:break-word}
+</style></head><body><main><p>🔋 INTERNET BATTERY · 0.15 RESEARCH PILOT</p><h1>Deneysel kullanım hakkı</h1><p class="warn">Bu sayfadaki GB, mobil operatörden satın alınmış veri değildir. Çevrimdışı canlı internet sağlamaz. Kullanım hakkı testleri içindir.</p>
+<section class="card"><h2>Cihaz eşleştirme</h2><p class="small">Cihaz anahtarını yalnızca bu resmi HTTPS adresinde girin. Anahtar tarayıcıya kaydedilmez, sunucuya gönderilmez.</p><label for="device">Cihaz kimliği</label><input id="device" autocomplete="off" placeholder="ib-..." spellcheck="false"><label for="key">Cihaz anahtarı (64 karakter hexadecimal)</label><input id="key" autocomplete="off" type="password" placeholder="64 hex" spellcheck="false"><button id="balance">Bakiyeyi sorgula</button><p id="credits" class="value">Henüz sorgulanmadı</p></section>
+<section class="card"><h2>İmzalı kullanım belgesi</h2><label for="gb">Paket büyüklüğü</label><select id="gb"><option value="1">1 GB</option><option value="5">5 GB</option><option value="10">10 GB</option></select><button id="issue">IB1 belgesi oluştur</button><label for="voucher">Android uygulamasındaki IB1 alanına yapıştır</label><textarea id="voucher" readonly></textarea><button class="secondary" id="copy">Belgeyi kopyala</button><p class="small">Belge 24 saat geçerlidir. Cüzdan bakiyesi veritabanında korunur; servis başına aktarım limiti ayrıca uygulanır.</p></section><section class="card"><h2>İşlem durumu</h2><p id="result" role="status">Hazır.</p></section></main>
+<script>
+const $=id=>document.getElementById(id);
+const utf=s=>new TextEncoder().encode(s);
+const hexToBytes=h=>new Uint8Array(h.match(/.{2}/g).map(x=>parseInt(x,16)));
+const bytesToHex=b=>Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');
+const digest=async s=>bytesToHex(await crypto.subtle.digest('SHA-256',utf(s)));
+async function request(path,data){
+ const id=$('device').value.trim(),key=$('key').value.trim();
+ if(!/^[a-z0-9-]{3,40}$/.test(id)||!/^[a-fA-F0-9]{64}$/.test(key))throw Error('Cihaz kimliği veya 64-hex anahtar yanlış.');
+ const ts=String(Date.now()),nonce=bytesToHex(crypto.getRandomValues(new Uint8Array(16))),body=JSON.stringify(data);
+ const payload=`${id}\n${ts}\n${nonce}\nPOST\n${path}\n${await digest(body)}`;
+ const hmacKey=await crypto.subtle.importKey('raw',hexToBytes(key),{name:'HMAC',hash:'SHA-256'},false,['sign']);
+ const signature=bytesToHex(await crypto.subtle.sign('HMAC',hmacKey,utf(payload)));
+ const res=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json','x-ib-id':id,'x-ib-ts':ts,'x-ib-nonce':nonce,'x-ib-mac':signature},body,cache:'no-store',credentials:'omit'});
+ const result=await res.json();if(!res.ok)throw Error((result.error||'Sunucu hatası')+' (HTTP '+res.status+')');return result;
+}
+$('balance').onclick=async()=>{try{$('result').textContent='Bakiye okunuyor...';const b=await request('/v1/wallet/balance',{});$('credits').textContent=(b.availableBytes/1e9).toFixed(3)+' GB kullanılabilir';$('result').textContent='Deneysel bakiye okundu; operatör paketi değildir.';}catch(e){$('result').textContent=e.message;}};
+$('issue').onclick=async()=>{try{$('result').textContent='İmzalı belge hazırlanıyor...';const v=await request('/v1/wallet/issue',{packageGb:Number($('gb').value)});$('voucher').value=v.voucher;$('result').textContent='Belge hazır; Android uygulamasının IB1 alanına yapıştır.';}catch(e){$('result').textContent=e.message;}};
+$('copy').onclick=async()=>{try{if(!$('voucher').value)throw Error('Önce belge oluşturun');await navigator.clipboard.writeText($('voucher').value);$('result').textContent='Belge kopyalandı.';}catch(e){$('result').textContent=e.message;}};
+</script></body></html>

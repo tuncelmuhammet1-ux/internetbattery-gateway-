@@ -5,8 +5,11 @@ import {fileURLToPath} from 'node:url';
 import {readConfig, verifyHeaders, publicV4} from './auth.mjs';
 import {upgradeWebSocket} from './ws.mjs';
 import {makeAndroid013Gateway} from './android013.mjs';
+import {verifierFromPem, GB} from './voucher.mjs';
+import {makeWalletApi} from './wallet-api.mjs';
+import {connectPostgresLedger} from './ledger.mjs';
 
-const VERSION='0.14.1-lab';
+const VERSION='0.15.0-lab';
 const MAX_STREAMS=4;
 const MAX_DATA=96*1024;
 function publicHost(host) {return typeof host==='string' && host.length<=253 && host.includes('.') && host.split('.').every(label => /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/.test(label));}
@@ -17,16 +20,28 @@ function validateBase64(b64) {return typeof b64==='string' && b64.length>0 && b6
 
 export function makeServer(env=process.env, hooks={}) {
   const config=readConfig(env);
-  const android013=makeAndroid013Gateway(config,{lookup:hooks.android013Lookup,connect:hooks.android013Connect});
+  const ledger=hooks.ledger||null;
+  const creditReady=Boolean(ledger&&env.IB_CREDIT_DB_ENABLED==='1' && env.IB_ISSUER_PUBLIC_KEY_PEM && env.IB_VOUCHER_GATEWAY_ID);
+  const verifyVoucher=creditReady?verifierFromPem(env.IB_ISSUER_PUBLIC_KEY_PEM,{gatewayId:env.IB_VOUCHER_GATEWAY_ID}):null;
+  const android013=makeAndroid013Gateway(config,{lookup:hooks.android013Lookup,connect:hooks.android013Connect,
+    ledger:creditReady?ledger:null,verifyVoucher});
   const android013Enabled=env.IB_ANDROID013_COMPAT==='1';
-  // This implementation is a transport test, not the 0.13 IB1 voucher redemption service.
+  const walletReady=Boolean(creditReady&&env.IB_WALLET_HTTP_ENABLED==='1'&&env.IB_ISSUER_PRIVATE_KEY_PEM);
+  const walletApi=makeWalletApi(config,{ledger,enabled:walletReady,privateKeyPem:env.IB_ISSUER_PRIVATE_KEY_PEM,
+    gatewayId:env.IB_VOUCHER_GATEWAY_ID});
+  // Database balance is research credit, not a prepaid cellular data plan.
   const nonceCache=new Map();
   const maxAge=2*60*1000;
   let openSessions=0;
   const server=http.createServer((req,res)=>{
+    if(req.url==='/wallet'||req.url?.startsWith('/v1/wallet/')){
+      void Promise.resolve(walletApi(req,res)).catch(()=>jsonResponse(res,503,{error:'wallet_internal_error'}));return;
+    }
     if(req.method!=='GET')return jsonResponse(res,405,{error:'method_not_allowed'});
     if(req.url==='/healthz')return jsonResponse(res,200,{service:'internetbattery-gateway',version:VERSION,status:'alive'});
-    if(req.url==='/readyz')return jsonResponse(res,config?200:503,{ready:!!config,mode:'lab_ws1',android013LabCompatibility:android013Enabled,ib1VoucherSupport:false});
+    if(req.url==='/readyz')return jsonResponse(res,config?200:503,{ready:!!config,mode:'lab_ws1',android013LabCompatibility:android013Enabled,
+      creditLedgerReady:creditReady,ib1VoucherSupport:creditReady,walletPortalReady:walletReady,
+      labSessionByteCap:config?.limit||0,requiresActiveNetwork:true});
     return jsonResponse(res,404,{error:'not_found'});
   });
   server.on('upgrade',(req,socket,head)=>{
@@ -110,7 +125,23 @@ export function makeServer(env=process.env, hooks={}) {
 }
 
 if(process.argv[1] && fileURLToPath(import.meta.url)===process.argv[1]){
-  const port=Number(process.env.PORT||3000);
-  const server=makeServer();
-  server.listen(port,'0.0.0.0',()=>console.log(JSON.stringify({service:'internetbattery-gateway',version:VERSION,port,lab:true})));
+  async function boot(){
+    const env=process.env;
+    let ledger=null;
+    if(env.IB_CREDIT_DB_ENABLED==='1'){
+      ledger=await connectPostgresLedger(env.DATABASE_URL,{ssl:env.IB_POSTGRES_SSL==='1'});
+      // Idempotent operator-originated LAB packages: test rights, not earned carrier data.
+      // Each grant ID is constant, so restarting/redeploying never mints duplicates.
+      if(env.IB_LAB_SEED_PACKAGES){
+        const options=env.IB_LAB_SEED_PACKAGES.split(',').map(x=>Number(x.trim()));
+        if(options.some(x=>![1,5,10].includes(x))||new Set(options).size!==options.length)throw Error('invalid_lab_seed_packages');
+        for(const gb of options){await ledger.grant(env.IB_DEVICE_ID,gb*GB,`pilot20261013_${gb}gb`,'lab_admin');}
+      }
+    }
+    const port=Number(env.PORT||3000);
+    const server=makeServer(env,{ledger});
+    server.listen(port,'0.0.0.0',()=>console.log(JSON.stringify({service:'internetbattery-gateway',version:VERSION,port,lab:true,creditLedgerConfigured:!!ledger})));
+    process.on('SIGTERM',()=>server.close());
+  }
+  boot().catch(e=>{console.error('IB_GATEWAY_STARTUP_FAILED',e.code||e.message?.split(':')[0]||'configuration_failure');process.exitCode=1;});
 }
