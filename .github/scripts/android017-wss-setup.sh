@@ -75,6 +75,17 @@ old='catch (_: Throwable) { false }'
 new='catch (e: Throwable) { Log.e("IB17_HEV_DIAG", "TProxyIsRunning JNI exception", e); false }'
 if hev.count(old)!=1:raise SystemExit('Unexpected JNI state source')
 hev=hev.replace(old,new)
+
+# CI-only native logging in the app sandbox. Never emit a complete YAML config,
+# key or password. The diagnostic log is not bundled into Android releases.
+log_before='                  log-level: warn'
+log_after='                  log-level: debug'+chr(10)+'                  log-file: '+chr(39)+chr(36)+'{context.filesDir}/ib-native-engine.log'+chr(39)
+if hev.count(log_before)!=1:raise SystemExit('Unexpected Hev logging anchor')
+hev=hev.replace(log_before,log_after)
+call_before='val started = TProxyService.TProxyStartService(conf.absolutePath, fd)'
+call_after='Log.i("IB17_HEV_DIAG", "Invoking native TUN service, fd="+fd+", configFound="+conf.exists())'+chr(10)+'                    '+call_before
+if hev.count(call_before)!=1:raise SystemExit('Unexpected TProxy invocation')
+hev=hev.replace(call_before,call_after)
 hev_source.write_text(hev)
 print("ANDROID17_TEST_SOURCE_PREPARED")
 PY
