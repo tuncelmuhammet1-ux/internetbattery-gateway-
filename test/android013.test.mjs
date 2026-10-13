@@ -96,7 +96,7 @@ test('Android 0.13 upgrade succeeds, private host and port denied, DNS returns e
     p=nextFrame(a.socket);a.socket.write(maskedFrame({op:'connect',host:'example.com',port:22}));
     x=await p;assert.equal(x.value.op,'error');assert.equal(x.value.error,'destination_blocked');
     p=nextFrame(a.socket);a.socket.write(maskedFrame({op:'balance'}));
-    x=await p;assert.equal(x.value.error,'ib1_not_enabled_on_ephemeral_gateway');
+    x=await p;assert.equal(x.value.error,'ib1_voucher_required');
     const duplicate=await requestWs(port,auth);assert.match(duplicate.status,/401/);duplicate.socket.destroy();a.socket.destroy();
   });
 });
@@ -104,7 +104,7 @@ test('Android 0.13 upgrade succeeds, private host and port denied, DNS returns e
 test('Android 0.13 voucher header is fail-closed until durable rights support exists',async()=>{
   await withServer(async port=>{
     const h={...headers(),'X-IB-Voucher':'IB1.madeup'};
-    const a=await requestWs(port,h);assert.match(a.status,/403/);a.socket.destroy();
+    const a=await requestWs(port,h);assert.match(a.status,/503/);a.socket.destroy();
     const b=await requestWs(port,{'X-IB-ID':cfg.device});assert.match(b.status,/401/);b.socket.destroy();
   });
 });
