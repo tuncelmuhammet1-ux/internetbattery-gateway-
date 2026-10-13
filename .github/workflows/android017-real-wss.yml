@@ -1,4 +1,4 @@
-name: Android 0.17 real emulator WSS DNS preflight
+name: Android 0.17 emulator WSS and VPN HTTPS acceptance
 on:
   push:
     branches: [test/android017-real-wss-preflight]
@@ -44,7 +44,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
           test -e /dev/kvm
-      - name: Boot Android 15 and run real WSS/TLS + DNS app preflight
+      - name: Android 15 WSS/DNS preflight and consented VPN HTTPS acceptance
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: 35
@@ -60,7 +60,9 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: internetbattery-017-android-wss-proof
-          path: .private/ci-instrumentation-result.txt
+          path: |
+            .private/ci-instrumentation-result.txt
+            .private/ci-vpn-instrumentation-result.txt
           if-no-files-found: warn
           retention-days: 7
       - name: Terminate temporary WSS gateway and tunnel
