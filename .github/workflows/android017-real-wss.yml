@@ -1,7 +1,7 @@
-name: Android 0.17 real emulator WSS DNS preflight
+name: Android 0.17 VPN HTTPS over temporary protected WSS
 on:
   push:
-    branches: [test/android017-real-wss-preflight]
+    branches: [test/android017-vpn-e2e]
   workflow_dispatch:
 
 permissions:
@@ -44,7 +44,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
           test -e /dev/kvm
-      - name: Boot Android 15 and run real WSS/TLS + DNS app preflight
+      - name: Boot Android 15 and verify WSS preflight followed by user-consented VPN/TUN HTTPS
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: 35
@@ -54,13 +54,15 @@ jobs:
           emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           emulator-boot-timeout: 900
           disable-animations: true
-          script: bash .github/scripts/android017-wss-emulator.sh
+          script: bash .github/scripts/android017-wss-emulator.sh && bash .github/scripts/android017-vpn-emulator.sh
       - name: Save non-secret integration test result
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: internetbattery-017-android-wss-proof
-          path: .private/ci-instrumentation-result.txt
+          name: internetbattery-017-android-vpn-e2e-proof
+          path: |
+            .private/ci-instrumentation-result.txt
+            .private/ci-vpn-instrumentation-result.txt
           if-no-files-found: warn
           retention-days: 7
       - name: Terminate temporary WSS gateway and tunnel
