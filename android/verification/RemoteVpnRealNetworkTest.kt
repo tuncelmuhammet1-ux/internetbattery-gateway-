@@ -84,7 +84,20 @@ class RemoteVpnRealNetworkTest {
                 }
                 ok
             }
-            if (!verified) Log.e("IB17_VPN_TEST", "Android VPN did not verify HTTPS: $details")
+            if (!verified) {
+                Log.e("IB17_VPN_TEST", "Android VPN did not verify HTTPS: $details")
+                val nativeLog = java.io.File(app.filesDir, "ib-native-engine.log")
+                if (nativeLog.isFile) {
+                    runCatching {
+                        for (entry in nativeLog.readLines().takeLast(90)) {
+                            val lowered = entry.lowercase()
+                            if (listOf("password", "username", "secret", "authorization", "token", "key=").none { lowered.contains(it) }) {
+                                Log.e("IB17_NATIVE_LOG", entry.take(230))
+                            }
+                        }
+                    }.onFailure { Log.e("IB17_NATIVE_LOG", "Failed to read native diagnostic: "+it.javaClass.simpleName) }
+                } else Log.e("IB17_NATIVE_LOG", "No native diagnostic file produced")
+            }
             assertTrue("VPN tunnel failed HTTPS proof. Last status: $details", verified)
             Log.i("IB17_VPN_TEST", "IB17_ANDROID_VPN_WSS_HTTPS_VERIFIED")
             println("IB17_ANDROID_VPN_WSS_HTTPS_VERIFIED")
