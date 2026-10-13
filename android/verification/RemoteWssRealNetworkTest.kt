@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -27,6 +28,21 @@ class RemoteWssRealNetworkTest {
         require(wss.startsWith("wss://") && wss.endsWith("/tunnel"))
         require(key.matches(Regex("[a-f0-9]{64}")))
         val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val cm = context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        val underlayReady = runBlocking {
+            var connected = false
+            for (i in 0 until 100) {
+                val network = cm.activeNetwork
+                if (network != null &&
+                    cm.getNetworkCapabilities(network)?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true) {
+                    connected = true
+                    break
+                }
+                delay(500)
+            }
+            connected
+        }
+        assertTrue("Android emulator network not ready after 50s", underlayReady)
         val result = runBlocking {
             withTimeout(75_000L) {
                 RemoteWssProbe.run(context, wss, device, key, "")
