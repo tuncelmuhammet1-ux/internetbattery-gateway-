@@ -1,0 +1,35 @@
+name: InternetBattery Gateway Compatibility Checks
+on:
+  push:
+    branches:
+      - feature/android013-wire
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  node-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout vetted source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Select Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install exact lockfile dependencies
+        run: npm ci --omit=dev
+      - name: Lint syntax for adapter modules
+        run: |
+          node --check server.mjs
+          node --check android013.mjs
+          node --check ws.mjs
+      - name: Run legacy and Android 0.13 compatibility tests
+        run: npm test
