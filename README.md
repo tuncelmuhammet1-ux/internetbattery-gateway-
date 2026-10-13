@@ -55,3 +55,10 @@ Read `docs/PARTICIPANT_NETWORK_FIELD_TEST_TR.md` for the lawful, consent-based p
 ## Security caveats
 
 Research code, not audited. PBKDF master key unrelated to operator billing; session cap/country restrictions not a payment guarantee. Do not relay sensitive accounts, publicly expose device credentials, or put a database URL in source or user-visible logs. The trial cannot guarantee 1/5/10 GB throughput or unmetered access. Render Free's web service spins down when idle and the Free Postgres database expires without backup.
+
+
+## One-time Android pairing (0.16 Lab)
+
+The existing Android 0.13 wire client and the separately installable 0.16 Lab app need the per-device HMAC key, **not** IB_MASTER_KEY. After the web service is deployed and its `IB_PAIRING_ENABLED=1` flag is set, the service generates a cryptographically random 128-bit one-time pairing code and logs it *only* to the protected Render Logs. The operator enters that code at the HTTPS `/pair` page. A successful redemption returns the device ID, derived device key and WSS URL. It is valid once, for up to 30 minutes, and isn't shared in GitHub, logs after redemption or the APK.
+
+The operator must save the device key privately for subsequent app restarts; the original Android 0.13 UI does not persist the secret in encrypted storage yet. Never share the master key, the code or the derived key in public. If the code expires without being redeemed, a new process restart generates another code. The `/pair` page does not grant any research data credit and has no bypass for a disabled database.

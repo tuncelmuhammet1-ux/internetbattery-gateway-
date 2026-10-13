@@ -8,6 +8,7 @@ import {makeAndroid013Gateway} from './android013.mjs';
 import {verifierFromPem, GB} from './voucher.mjs';
 import {makeWalletApi} from './wallet-api.mjs';
 import {connectPostgresLedger} from './ledger.mjs';
+import {createPairing} from './pairing.mjs';
 
 const VERSION='0.15.0-lab';
 const MAX_STREAMS=4;
@@ -30,17 +31,19 @@ export function makeServer(env=process.env, hooks={}) {
   const walletApi=makeWalletApi(config,{ledger,enabled:walletReady,privateKeyPem:env.IB_ISSUER_PRIVATE_KEY_PEM,
     gatewayId:env.IB_VOUCHER_GATEWAY_ID});
   // Database balance is research credit, not a prepaid cellular data plan.
+  const pairing=createPairing(config,{enabled:env.IB_PAIRING_ENABLED==='1',code:hooks.pairingCode,emit:hooks.pairingEmit||console.log});
   const nonceCache=new Map();
   const maxAge=2*60*1000;
   let openSessions=0;
   const server=http.createServer((req,res)=>{
+    if(req.url==='/pair'||req.url==='/v1/pair/redeem'){void pairing(req,res).catch(()=>jsonResponse(res,503,{error:'pairing_unavailable'}));return;}
     if(req.url==='/wallet'||req.url?.startsWith('/v1/wallet/')){
       void Promise.resolve(walletApi(req,res)).catch(()=>jsonResponse(res,503,{error:'wallet_internal_error'}));return;
     }
     if(req.method!=='GET')return jsonResponse(res,405,{error:'method_not_allowed'});
     if(req.url==='/healthz')return jsonResponse(res,200,{service:'internetbattery-gateway',version:VERSION,status:'alive'});
     if(req.url==='/readyz')return jsonResponse(res,config?200:503,{ready:!!config,mode:'lab_ws1',android013LabCompatibility:android013Enabled,
-      creditLedgerReady:creditReady,ib1VoucherSupport:creditReady,walletPortalReady:walletReady,
+      creditLedgerReady:creditReady,ib1VoucherSupport:creditReady,walletPortalReady:walletReady,pairingPortalConfigured:env.IB_PAIRING_ENABLED==='1',
       labSessionByteCap:config?.limit||0,requiresActiveNetwork:true});
     return jsonResponse(res,404,{error:'not_found'});
   });
