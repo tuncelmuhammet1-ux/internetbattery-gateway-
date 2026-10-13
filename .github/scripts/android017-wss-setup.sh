@@ -101,6 +101,41 @@ fixed='''                } finally {
 if hev.count(racy)!=1:raise SystemExit('Original premature-delete block not found exactly once')
 hev=hev.replace(racy,fixed)
 print('IB17_HEV_CONFIG_RACE_FIXED')
+
+# CI-only routing isolation prevents Android system background applications
+# from exhausting the 4-connection trial gateway during app HTTPS acceptance.
+vpn_limited='                    .setUnderlyingNetworks(arrayOf(underlying))'
+vpn_isolated=vpn_limited+chr(10)+'                    .addAllowedApplication(packageName)'
+if vpn_text.count(vpn_limited)!=1:raise SystemExit('Expected one Android VPN underlay declaration')
+vpn_text=vpn_text.replace(vpn_limited,vpn_isolated)
+vpn_source.write_text(vpn_text)
+# Annotate only address-family, destination port and gateway denial reasons.
+# No hostnames, URLs, user credentials or packet payloads are logged.
+bridge_source=p/'app/src/main/java/com/internetbattery/WssSocksBridge.kt'
+bridge=bridge_source.read_text()
+tcp_anchor='''        val out=sock.getOutputStream()
+        if(port!=80&&port!=443)'''
+tcp_diag='''        val out=sock.getOutputStream()
+        val family = if(host.contains(':')) "ipv6" else if(host.all { it.isDigit() || it=='.' }) "ipv4" else "domain"
+        android.util.Log.w("IB17_BRIDGE_DIAG","tcp_request family="+family+" port="+port)
+        if(port!=80&&port!=443)'''
+if bridge.count(tcp_anchor)!=1:raise SystemExit('SOCKS bridge entry changed')
+bridge=bridge.replace(tcp_anchor,tcp_diag)
+err_anchor='''                    "error","quota"->{connected.complete(false);runCatching{sock.close()}}'''
+err_diag='''                    "error","quota"->{android.util.Log.w("IB17_BRIDGE_DIAG","tcp_gateway_denial="+runCatching{JSONObject(text).optString("error")}.getOrDefault("unknown"));connected.complete(false);runCatching{sock.close()}}'''
+if bridge.count(err_anchor)!=1:raise SystemExit('SOCKS error handler changed')
+bridge=bridge.replace(err_anchor,err_diag)
+fail_anchor='''                connected.complete(false);runCatching{sock.close()}
+            }
+            override fun onClosed'''
+fail_diag='''                android.util.Log.w("IB17_BRIDGE_DIAG","tcp_ws_failure status="+(r?.code ?: 0)+" reason="+t.javaClass.simpleName)
+                connected.complete(false);runCatching{sock.close()}
+            }
+            override fun onClosed'''
+if bridge.count(fail_anchor)!=1:raise SystemExit('SOCKS websocket failure anchor changed')
+bridge=bridge.replace(fail_anchor,fail_diag)
+bridge_source.write_text(bridge)
+print('IB17_VPN_APP_ONLY_AND_BRIDGE_DIAGNOSTICS_ADDED')
 hev_source.write_text(hev)
 print("ANDROID17_TEST_SOURCE_PREPARED")
 PY
@@ -116,7 +151,7 @@ process.stdout.write(createHmac("sha256",master).update("IB09-device:"+process.e
 ')"
 echo "::add-mask::$master"
 echo "::add-mask::$key"
-RUNNER_TRACKING_ID='' IB_MASTER_KEY="$master" IB_DEVICE_ID="$device" IB_ANDROID013_COMPAT=1 IB_SESSION_BYTE_CAP=1048576 PORT=18600 \
+RUNNER_TRACKING_ID='' IB_MASTER_KEY="$master" IB_DEVICE_ID="$device" IB_ANDROID013_COMPAT=1 IB_SESSION_BYTE_CAP=8388608 PORT=18600 \
   nohup node server.mjs > .private/ephemeral-gateway.log 2>&1 < /dev/null &
 echo $! > .private/gateway.pid
 for i in $(seq 1 40); do if curl --fail --silent http://127.0.0.1:18600/readyz | grep -q '"ready":true';then break;fi;sleep 1;done
