@@ -25,3 +25,20 @@ if ! grep -q 'OK (1 test)' .private/ci-instrumentation-result.txt; then
   exit 1
 fi
 echo 'IB17_ANDROID_REAL_WSS_PREFLIGHT_SUCCESS'
+# Grant only standard runtime permissions needed for user-consented VPN research.
+adb shell pm grant com.internetbattery.lab17 android.permission.POST_NOTIFICATIONS
+adb shell pm grant com.internetbattery.lab17 android.permission.NEARBY_WIFI_DEVICES
+adb shell pm grant com.internetbattery.lab17 android.permission.ACCESS_FINE_LOCATION
+echo 'IB17_EMULATOR_VPN_TRIAL_START'
+timeout 210s adb shell am instrument -w -r \
+  -e class com.internetbattery.RemoteWssVpnEndToEndTest \
+  -e ib_wss "$IB_CI_WSS" \
+  -e ib_device "$IB_CI_DEVICE" \
+  -e ib_device_key "$IB_CI_KEY" \
+  com.internetbattery.lab17.test/androidx.test.runner.AndroidJUnitRunner \
+  | tee .private/ci-vpn-instrumentation-result.txt
+if ! grep -q 'OK (1 test)' .private/ci-vpn-instrumentation-result.txt; then
+  echo 'IB17_ANDROID_VPN_WSS_HTTPS_FAILED'
+  exit 1
+fi
+echo 'IB17_ANDROID_VPN_WSS_HTTPS_SUCCESS'
