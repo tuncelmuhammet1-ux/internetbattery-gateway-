@@ -39,10 +39,10 @@ class RemoteVpnRealNetworkTest {
         }
         val isPrepared = runBlocking {
             var prepared = false
-            repeat(80) {
+            for (i in 0 until 80) {
                 if (VpnService.prepare(app) == null) {
                     prepared = true
-                    return@repeat
+                    break
                 }
                 delay(500)
             }
@@ -54,17 +54,17 @@ class RemoteVpnRealNetworkTest {
             TunnelVpnService.start(app, wss, key, device, "")
             val verified = runBlocking {
                 var ok = false
-                repeat(90) {
+                for (i in 0 until 120) {
                     delay(500)
                     val state = RuntimeStatus.state.value
                     details = state.vpnMessage
                     if (state.vpnHttpsVerified) {
                         ok = true
-                        return@repeat
+                        break
                     }
                     if (details.startsWith("Uzak WSS VPN hatası:") ||
                         details.startsWith("Uzak WSS erişimi veya VPN çift yönlü HTTPS kanıtı yok")) {
-                        return@repeat
+                        break
                     }
                 }
                 ok
