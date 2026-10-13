@@ -130,6 +130,6 @@ export async function runRemoteWssHttpsProbe({url,config,remoteHost='example.com
    });
    if(!secureReady||result.httpStatus<200||result.httpStatus>=400)throw Error('remote_https_invalid_response');
    secure.destroy();
-   return {ok:true,mode:'wss_tcp_tls_https',httpStatus:result.httpStatus,bytesReceived:result.bytes,durationMs:Date.now()-begin};
+   return {ok:true,mode:'wss_tcp_tls_https',httpStatus:result.httpStatus,tlsAuthorized:result.tlsAuthorized,bytesReceived:result.bytes,durationMs:Date.now()-begin};
  }finally{ws.close();}
 }
